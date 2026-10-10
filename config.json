@@ -1,0 +1,9 @@
+{
+  "sourceDirectory": "\\\\localhost\\D$\\Politech\\5semester\\smit\\BackupService\\test",
+  "archivePath": "\\\\localhost\\D$\\Politech\\5semester\\smit\\BackupService\\test.zip",
+  "masks": [
+    "*.txt",
+    "*.doc?",
+    "demo_*.exe"
+  ]
+}
