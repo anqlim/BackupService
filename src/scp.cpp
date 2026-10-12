@@ -91,10 +91,27 @@ void ServiceController::start() {
         throw makeWinApiError("Cannot open Service Control Manager");
     }
 
-    SC_HANDLE service = OpenService(manager, kServiceName, SERVICE_START);
+    SC_HANDLE service = OpenService(manager, kServiceName, SERVICE_START | SERVICE_QUERY_STATUS);
     if (service == nullptr) {
         CloseServiceHandle(manager);
         throw makeWinApiError("Cannot open service");
+    }
+
+    const DWORD currentState = queryServiceStatus(service).dwCurrentState;
+    if (currentState == SERVICE_RUNNING) {
+        CloseServiceHandle(service);
+        CloseServiceHandle(manager);
+        throw std::runtime_error("Service is already running");
+    }
+    if (currentState == SERVICE_START_PENDING) {
+        CloseServiceHandle(service);
+        CloseServiceHandle(manager);
+        throw std::runtime_error("Service is already starting");
+    }
+    if (currentState == SERVICE_STOP_PENDING) {
+        CloseServiceHandle(service);
+        CloseServiceHandle(manager);
+        throw std::runtime_error("Service is stopping; wait until it stops");
     }
 
     if (!StartService(service, 0, nullptr)) {
@@ -121,15 +138,24 @@ void ServiceController::stop() {
     }
 
     const SERVICE_STATUS_PROCESS status = queryServiceStatus(service);
-    if (status.dwCurrentState != SERVICE_STOPPED) {
-        SERVICE_STATUS ignoredStatus{};
-        if (!ControlService(service, SERVICE_CONTROL_STOP, &ignoredStatus)) {
-            CloseServiceHandle(service);
-            CloseServiceHandle(manager);
-            throw makeWinApiError("Cannot stop service");
-        }
-        waitUntilStopped(service);
+    if (status.dwCurrentState == SERVICE_STOPPED) {
+        CloseServiceHandle(service);
+        CloseServiceHandle(manager);
+        throw std::runtime_error("Service is already stopped");
     }
+    if (status.dwCurrentState == SERVICE_STOP_PENDING) {
+        CloseServiceHandle(service);
+        CloseServiceHandle(manager);
+        throw std::runtime_error("Service is already stopping");
+    }
+
+    SERVICE_STATUS ignoredStatus{};
+    if (!ControlService(service, SERVICE_CONTROL_STOP, &ignoredStatus)) {
+        CloseServiceHandle(service);
+        CloseServiceHandle(manager);
+        throw makeWinApiError("Cannot stop service");
+    }
+    waitUntilStopped(service);
 
     CloseServiceHandle(service);
     CloseServiceHandle(manager);
